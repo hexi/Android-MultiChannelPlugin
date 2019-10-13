@@ -17,7 +17,7 @@ repositories {
 }
 
 android {
-    compileSdkVersion 27
+    compileSdkVersion 28
 
     signingConfigs {
         config {
@@ -31,7 +31,7 @@ android {
     defaultConfig {
         applicationId "fc.example.app"
         minSdkVersion 14
-        targetSdkVersion 27
+        targetSdkVersion 28
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -76,8 +76,8 @@ dependencies {
     androidTestImplementation('com.android.support.test.espresso:espresso-core:2.2.2', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
-    implementation 'fc.multi.channel:library:1.1.0'
-    implementation 'com.android.support:appcompat-v7:27.1.1'
+    api project(':library')
+    implementation 'androidx.appcompat:appcompat:1.1.0'
     implementation "com.google.code.gson:gson:2.3.1"
     testImplementation 'junit:junit:4.12'
 }

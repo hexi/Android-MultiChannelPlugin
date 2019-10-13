@@ -3,7 +3,14 @@ package fc.multi.channel.library;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.text.TextUtils;
+import android.util.Log;
+
+import androidx.annotation.Nullable;
+
 import com.google.gson.Gson;
 
 import java.io.BufferedReader;
@@ -22,7 +29,9 @@ public class ChannelReader {
     private static final String KEY_APP_CHANNEL_ID = "app_channel_id";
     private static final String KEY_APP_DEFAULT_CHANNEL_ID = "app_default_channel_id";
     private static final String KEY_APP_CHANNEL_EXT_INFO = "app_channel_ext_info";
+    private static final String KEY_APP_VERSION_CODE = "key_app_version_code";
     private final static String DEFAULT_CHANNEL_ID = "0";
+    private static volatile String channelId;
     private static SharedPreferences getSharePreferences(Context context) {
         return context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE);
     }
@@ -47,6 +56,12 @@ public class ChannelReader {
     }
 
     private synchronized static String update(Context context, String defaultChannelId) {
+        String cachedChannelId = getCachedChannelId(context);
+        if (!TextUtils.isEmpty(cachedChannelId)) {
+            ChannelReader.channelId = cachedChannelId;
+            return cachedChannelId;
+        }
+
         ApplicationInfo appinfo = context.getApplicationInfo();
         String sourceDir = appinfo.sourceDir;
         String ret = "";
@@ -90,29 +105,78 @@ public class ChannelReader {
             }
         }
 
+        SharedPreferences.Editor editor = getSharePreferences(context).edit();
+        String marketId;
         if (TextUtils.isEmpty(ret)) {
-            return defaultChannelId;
+            marketId = defaultChannelId;
         } else {
-            String marketId = defaultChannelId;
+            marketId = defaultChannelId;
             final int contentMinLen = 3;
             String[] split = ret.split("-");
             if (split != null && split.length >= contentMinLen) {
                 marketId = split[split.length - 1];
             }
-            SharedPreferences.Editor editor = getSharePreferences(context).edit();
-            editor.putString(KEY_APP_CHANNEL_ID, marketId);
             editor.putString(KEY_APP_CHANNEL_EXT_INFO, extInfo);
-            editor.commit();
-            return marketId;
         }
+        ChannelReader.channelId = marketId;
+
+        editor.putString(KEY_APP_CHANNEL_ID, marketId);
+        // 缓存当前app的versionCode
+        editor.putLong(KEY_APP_VERSION_CODE, getAppVersionCode(context));
+        editor.commit();
+        return marketId;
+    }
+
+    private static long getCachedVersionCode(Context context) {
+        return getSharePreferences(context).getLong(KEY_APP_VERSION_CODE, 0);
     }
 
     public static String getChannelId(Context context) {
-        if (getSharePreferences(context).getString(KEY_APP_CHANNEL_ID, null) != null) {
-            return getSharePreferences(context).getString(KEY_APP_CHANNEL_ID, getDefaultChannelId(context));
+        if (ChannelReader.channelId != null) {
+            return ChannelReader.channelId;
+        }
+
+        String marketId = getCachedChannelId(context);
+        if (!TextUtils.isEmpty(marketId)) {
+            ChannelReader.channelId = marketId;
+            return marketId;
         } else {
             return update(context, getDefaultChannelId(context));
         }
+    }
+
+    @Nullable
+    private static String getCachedChannelId(Context context) {
+        // 当前app版本AppVersionCode
+        long currentVersionCode = getAppVersionCode(context);
+        // 本地文件缓存的AppVersionCode
+        long cachedVersionCode = getCachedVersionCode(context);
+        String marketId = null;
+        if (currentVersionCode == cachedVersionCode) {
+            // 如果当前appVersionCode和缓存的appVersionCode一样，返回本地缓存的channelId
+            marketId = getSharePreferences(context).getString(KEY_APP_CHANNEL_ID, null);
+        }
+        return marketId;
+    }
+
+    /**
+     * 获取当前app version code
+     */
+    public static long getAppVersionCode(Context context) {
+        long appVersionCode = 0;
+        try {
+            PackageInfo packageInfo = context.getApplicationContext()
+                    .getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                appVersionCode = packageInfo.getLongVersionCode();
+            } else {
+                appVersionCode = packageInfo.versionCode;
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e("ChannelReader", e.getMessage());
+        }
+        return appVersionCode;
     }
 
     private static void saveDefaultChannelId(Context context, String defaultChannelId) {
