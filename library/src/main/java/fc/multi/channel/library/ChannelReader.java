@@ -32,20 +32,41 @@ public class ChannelReader {
     private static final String KEY_APP_VERSION_CODE = "key_app_version_code";
     private final static String DEFAULT_CHANNEL_ID = "0";
     private static volatile String channelId;
+    private static boolean debug; // 测试环境下每次app启动都从新解析apk的channelId
     private static SharedPreferences getSharePreferences(Context context) {
         return context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE);
     }
 
-    public static void init(Context context) {
-        init(context, DEFAULT_CHANNEL_ID);
+    /**
+     * @param context
+     * @param debug 为true时每次app启动都从新解析apk的channelId
+     */
+    public static void init(Context context, Boolean debug) {
+        init(context, DEFAULT_CHANNEL_ID, debug);
     }
 
-    public static void init(Context context, String defaultChannelId) {
+    /**
+     *
+     * @param context
+     * @param defaultChannelId
+     * @param debug 为true时每次app启动都从新解析apk的channelId
+     */
+    public static void init(Context context, String defaultChannelId, Boolean debug) {
+        ChannelReader.debug = debug;
         saveDefaultChannelId(context, defaultChannelId);
+        removeCachedChannelIdIfNeed(context);
         update(context, defaultChannelId);
     }
 
-    public static void initAsync(final Context context, final String defaultChannelId) {
+    /**
+     *
+     * @param context
+     * @param defaultChannelId
+     * @param debug 为true时每次app启动都从新解析apk的channelId
+     */
+    public static void initAsync(final Context context, final String defaultChannelId, Boolean debug) {
+        ChannelReader.debug = debug;
+        removeCachedChannelIdIfNeed(context);
         saveDefaultChannelId(context, defaultChannelId);
         new Thread(new Runnable() {
             @Override
@@ -124,11 +145,20 @@ public class ChannelReader {
         // 缓存当前app的versionCode
         editor.putLong(KEY_APP_VERSION_CODE, getAppVersionCode(context));
         editor.commit();
+
         return marketId;
     }
 
     private static long getCachedVersionCode(Context context) {
         return getSharePreferences(context).getLong(KEY_APP_VERSION_CODE, 0);
+    }
+
+    private static void removeCachedChannelIdIfNeed(Context context) {
+        if (ChannelReader.debug) {
+            SharedPreferences.Editor editor = getSharePreferences(context).edit();
+            editor.clear();
+            editor.commit();
+        }
     }
 
     public static String getChannelId(Context context) {
